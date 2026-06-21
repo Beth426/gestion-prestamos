@@ -15,3 +15,4 @@ export const CreatePrestamoSchema = z.object({
 })
 
 export type CreatePrestamoInput = z.infer<typeof CreatePrestamoSchema>
+export type CreatePrestamoOutput = z.output<typeof CreatePrestamoSchema>
