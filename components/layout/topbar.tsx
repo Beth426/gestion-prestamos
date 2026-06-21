@@ -11,7 +11,7 @@ export function Topbar({ session }: { session: Session }) {
       <div className="flex items-center gap-4">
         <div className="text-right">
           <p className="text-sm font-medium leading-none">{session.user?.name}</p>
-          <p className="text-xs text-zinc-500">{(session.user as { rol?: string }).rol}</p>
+          <p className="text-xs text-zinc-500">{session.user?.rol}</p>
         </div>
         <Button
           variant="ghost"

@@ -1,8 +1,9 @@
 'use client'
+import type { ReactNode } from 'react'
 import { SessionProvider } from 'next-auth/react'
 import { Toaster } from '@/components/ui/sonner'
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: ReactNode }) {
   return (
     <SessionProvider>
       {children}
