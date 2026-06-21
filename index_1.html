@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulador de Crédito · Dashboard</title>
+
+<!-- Tailwind CSS (CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        colors: {
+          ink: '#0b1220',
+          navy: { 900: '#0f172a', 800: '#1e293b', 700: '#334155' },
+          brand: {
+            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe', 300: '#93c5fd',
+            400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af'
+          }
+        }
+      }
+    }
+  };
+</script>
+
+<!-- Inter -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<!-- Alpine plugins primero, luego el core (orden obligatorio) -->
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<style>
+  [x-cloak] { display: none !important; }
+  /* Numeración tabular: las cifras quedan perfectamente alineadas en columnas */
+  .tnum { font-variant-numeric: tabular-nums; }
+  /* Scrollbars discretos */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.45); border-radius: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  @media print {
+    @page { margin: 14mm; }
+    .no-print { display: none !important; }
+    body { background: #fff !important; }
+    .print-flat { box-shadow: none !important; border-color: #cbd5e1 !important; }
+    .print-break-avoid { page-break-inside: avoid; }
+    main { padding: 0 !important; }
+  }
+</style>
+</head>
+
+<body class="font-sans bg-slate-100 text-slate-800 antialiased">
+<div
+  x-data="simulador"
+  x-cloak
+  class="min-h-screen"
+>
+
+  <!-- ===== ALERTA: AMORTIZACIÓN NEGATIVA ===== -->
+  <div
+    x-show="alertaNegativa"
+    x-transition.opacity.duration.300ms
+    class="no-print sticky top-0 z-30 bg-red-600 text-white"
+    role="alert"
+  >
+    <div class="max-w-[1800px] mx-auto px-5 py-3 flex items-start gap-3">
+      <svg class="w-5 h-5 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <p class="text-sm leading-snug">
+        <span class="font-bold">Amortización negativa.</span>
+        La cuota fija de
+        <span class="font-semibold tnum" x-text="formatMoney(cuotaManual)"></span>
+        es menor al interés del primer periodo
+        (<span class="font-semibold tnum" x-text="formatMoney(resultado.lineas[0] ? resultado.lineas[0].interes : 0)"></span>).
+        El saldo crecerá en lugar de reducirse: sube la cuota o ajusta el plazo.
+      </p>
+    </div>
+  </div>
+
+  <div class="max-w-[1800px] mx-auto lg:flex">
+
+    <!-- ============== SIDEBAR / PARÁMETROS ============== -->
+    <aside class="no-print lg:w-[380px] lg:shrink-0 lg:h-screen lg:sticky lg:top-0 bg-navy-900 text-slate-100 lg:overflow-y-auto">
+      <div class="p-7">
+        <div class="flex items-center gap-2.5 mb-1">
+          <div class="w-9 h-9 rounded-lg bg-brand-600 grid place-items-center shadow-lg shadow-brand-900/40">
+            <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div>
+            <h1 class="text-base font-bold tracking-tight text-white leading-none">Simulador de Crédito</h1>
+            <p class="text-[11px] text-slate-400 mt-1">Parámetros del ejercicio</p>
+          </div>
+        </div>
+
+        <div class="mt-7 space-y-5">
+
+          <!-- Sistema -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Sistema de crédito</label>
+            <select x-model="sistema" class="w-full rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition">
+              <option value="tradicional">Tradicional (sobre saldos)</option>
+              <option value="pagadiario">Pagadiario (interés plano por periodo)</option>
+              <option value="fijo">Interés único fijo / Gota a gota (% global)</option>
+            </select>
+          </div>
+
+          <!-- Monto -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Monto del préstamo ($)</label>
+            <input type="number" x-model.number="monto" min="0" max="999999999"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+          </div>
+
+          <!-- Fecha de desembolso -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Fecha de desembolso</label>
+            <input type="date" x-model="fechaDesembolso"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition [color-scheme:dark]" />
+            <p class="text-[11px] text-slate-500 mt-1">Define las fechas de exigibilidad del anexo al pagaré.</p>
+          </div>
+
+          <!-- Frecuencia -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Frecuencia de pagos</label>
+            <select x-model="frecuencia" class="w-full rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition">
+              <option value="mensual">Mensual</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="semanal">Semanal</option>
+            </select>
+          </div>
+
+          <!-- Plazo -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              Plazo (<span x-text="unidadPlural"></span>)
+            </label>
+            <input type="number" x-model.number="plazo" min="1" max="360"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+          </div>
+
+          <!-- Tipo de tasa (oculto en modo fijo) -->
+          <div x-show="!esFijo" x-transition.opacity>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Tipo de tasa de interés</label>
+            <select x-model="tipoTasa" class="w-full rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition">
+              <option value="anual">Anual efectiva E.A. (%)</option>
+              <option value="mensual">Mensual efectiva (%)</option>
+            </select>
+          </div>
+
+          <!-- Valor tasa -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5"
+              x-text="esFijo ? 'Interés global sobre el monto (%)' : 'Valor de la tasa (%)'"></label>
+            <input type="number" x-model.number="tasa" min="0" max="100" step="0.1"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+          </div>
+
+          <!-- Seguro / costos fijos -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Seguro de vida deudores / costos fijos por cuota ($)</label>
+            <input type="number" x-model.number="seguro" min="0" max="999999999"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+            <p class="text-[11px] text-slate-500 mt-1">Se suma a cada cuota y se refleja en el Costo Efectivo Anual.</p>
+          </div>
+
+          <!-- Periodo de gracia (oculto en modo fijo) -->
+          <div x-show="!esFijo" x-transition.opacity>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Periodo de gracia</label>
+            <select x-model="tipoGracia" class="w-full rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition">
+              <option value="ninguno">Ninguno</option>
+              <option value="parcial">Gracia parcial (solo interés)</option>
+              <option value="total">Gracia total (suma al capital)</option>
+            </select>
+          </div>
+
+          <!-- Tiempo de gracia -->
+          <div x-show="!esFijo && tipoGracia !== 'ninguno'" x-transition.opacity>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+              Duración de gracia (<span x-text="unidadPlural"></span>)
+            </label>
+            <input type="number" x-model.number="tiempoGracia" min="1" max="120"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+          </div>
+
+          <!-- Definición de cuota -->
+          <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Definición de cuota</label>
+            <select x-model="tipoCuota" class="w-full rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition">
+              <option value="auto">Automática (calculada)</option>
+              <option value="manual">Fija manual</option>
+            </select>
+          </div>
+
+          <!-- Cuota manual -->
+          <div x-show="tipoCuota === 'manual'" x-transition.opacity>
+            <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Valor de cuota manual ($)</label>
+            <input type="number" x-model.number="cuotaManual" min="0" max="999999999"
+              class="w-full tnum rounded-lg bg-navy-800 border border-navy-700 text-slate-100 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+          </div>
+
+          <div class="rounded-lg bg-brand-600/10 border-l-4 border-brand-500 p-3">
+            <p class="text-[12px] text-slate-300 leading-relaxed">El dashboard recalcula en tiempo real. Tus abonos extra quedan guardados en este navegador.</p>
+          </div>
+
+          <button @click="reiniciarAbonos()"
+            class="w-full text-[12px] font-semibold text-slate-300 hover:text-white border border-navy-700 hover:border-brand-500 rounded-lg px-3 py-2.5 transition">
+            Borrar abonos extra
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============== CONTENIDO PRINCIPAL ============== -->
+    <main class="flex-1 p-5 sm:p-8 lg:overflow-y-auto lg:h-screen">
+
+      <!-- Header -->
+      <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-600">Dashboard financiero</p>
+          <h2 class="text-2xl font-bold tracking-tight text-slate-900 mt-1">Resultado de la simulación</h2>
+          <p class="text-sm text-slate-500 mt-1 tnum">
+            Desembolso: <span x-text="fechaDesembolsoLegible"></span> · <span x-text="resultado.periodosTotales"></span> cuotas <span x-text="unidadCuota.toLowerCase()"></span>
+          </p>
+        </div>
+        <button @click="window.print()"
+          class="no-print inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 active:scale-[.98] text-white text-sm font-semibold px-5 py-2.5 rounded-lg shadow-md shadow-brand-600/25 transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Exportar PDF
+        </button>
+      </header>
+
+      <!-- Tarjetas resumen -->
+      <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Cuota <span x-text="unidadCuota.toLowerCase()"></span></p>
+          <p class="text-2xl font-extrabold text-slate-900 tnum mt-1" x-text="formatMoney(resultado.cuotaTotal)"></p>
+          <p class="text-[12px] text-slate-500 mt-1 tnum" x-show="resultado.seguro > 0">
+            Crédito <span x-text="formatMoney(resultado.cuotaBase)"></span> + seguro <span x-text="formatMoney(resultado.seguro)"></span>
+          </p>
+        </div>
+
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total pagado</p>
+          <p class="text-2xl font-extrabold text-slate-900 tnum mt-1" x-text="formatMoney(resultado.totalPagado)"></p>
+          <p class="text-[12px] text-slate-500 mt-1 tnum" x-show="resultado.totalSeguro > 0">
+            Incluye <span x-text="formatMoney(resultado.totalSeguro)"></span> en seguros/costos
+          </p>
+        </div>
+
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total intereses</p>
+          <p class="text-2xl font-extrabold text-slate-900 tnum mt-1" x-text="formatMoney(resultado.totalInteres)"></p>
+        </div>
+
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm p-5 relative overflow-hidden">
+          <span class="absolute top-0 left-0 right-0 h-1 bg-brand-600"></span>
+          <p class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Costo efectivo anual (real)</p>
+          <p class="text-2xl font-extrabold text-brand-700 tnum mt-1" x-text="resultado.cea"></p>
+          <p class="text-[12px] text-slate-500 mt-1">TIR de los flujos, seguros incluidos</p>
+        </div>
+      </section>
+
+      <!-- Estado -->
+      <div class="mb-8">
+        <span
+          class="inline-flex items-center gap-2 text-sm font-semibold px-3.5 py-1.5 rounded-full"
+          :class="resultado.estado.clase === 'ok' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'">
+          <span class="w-2 h-2 rounded-full"
+            :class="resultado.estado.clase === 'ok' ? 'bg-emerald-500' : 'bg-amber-500'"></span>
+          <span x-text="resultado.estado.text"></span>
+        </span>
+      </div>
+
+      <!-- Comparativo -->
+      <section class="mb-8 print-break-avoid">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
+          <span class="w-1 h-4 bg-brand-600 rounded"></span> Análisis comparativo de escenarios
+        </h3>
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+          <table class="w-full text-sm tnum min-w-[560px]">
+            <thead>
+              <tr class="text-slate-500 text-[11px] uppercase tracking-wider border-b border-slate-200 bg-slate-50">
+                <th class="text-left font-semibold px-4 py-3">Concepto</th>
+                <th class="text-right font-semibold px-4 py-3">Escenario base</th>
+                <th class="text-right font-semibold px-4 py-3">Con abonos extra</th>
+                <th class="text-right font-semibold px-4 py-3 no-print">Variación / ahorro</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr>
+                <td class="text-left font-semibold text-slate-700 px-4 py-3">Desembolso total pagado</td>
+                <td class="text-right px-4 py-3" x-text="formatMoney(resultado.comparativa.basePagado)"></td>
+                <td class="text-right px-4 py-3" x-text="formatMoney(resultado.comparativa.actualPagado)"></td>
+                <td class="text-right px-4 py-3 font-semibold no-print"
+                  :class="resultado.comparativa.ahorroDinero >= 0 ? 'text-emerald-600' : 'text-red-600'"
+                  x-text="(resultado.comparativa.ahorroDinero >= 0 ? '− ' : '+ ') + formatMoney(Math.abs(resultado.comparativa.ahorroDinero))"></td>
+              </tr>
+              <tr>
+                <td class="text-left font-semibold text-slate-700 px-4 py-3">Intereses consolidados</td>
+                <td class="text-right px-4 py-3" x-text="formatMoney(resultado.comparativa.baseInteres)"></td>
+                <td class="text-right px-4 py-3" x-text="formatMoney(resultado.comparativa.actualInteres)"></td>
+                <td class="text-right px-4 py-3 font-semibold no-print"
+                  :class="resultado.comparativa.ahorroInteres >= 0 ? 'text-emerald-600' : 'text-red-600'"
+                  x-text="(resultado.comparativa.ahorroInteres >= 0 ? '− ' : '+ ') + formatMoney(Math.abs(resultado.comparativa.ahorroInteres))"></td>
+              </tr>
+              <tr>
+                <td class="text-left font-semibold text-slate-700 px-4 py-3">Duración en periodos</td>
+                <td class="text-right px-4 py-3" x-text="resultado.comparativa.basePeriodos"></td>
+                <td class="text-right px-4 py-3" x-text="resultado.comparativa.actualPeriodos"></td>
+                <td class="text-right px-4 py-3 font-semibold no-print"
+                  :class="resultado.comparativa.ahorroMeses >= 0 ? 'text-emerald-600' : 'text-red-600'"
+                  x-text="(resultado.comparativa.ahorroMeses >= 0 ? '− ' : '+ ') + Math.abs(resultado.comparativa.ahorroMeses) + ' cta(s)'"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Amortización -->
+      <section>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+            <span class="w-1 h-4 bg-brand-600 rounded"></span> Tabla de amortización · fechas de exigibilidad
+          </h3>
+          <p class="text-[11px] text-slate-400 no-print">Desliza horizontalmente en móvil →</p>
+        </div>
+
+        <div class="print-flat bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+          <table class="w-full text-sm tnum min-w-[820px]">
+            <thead>
+              <tr class="text-slate-500 text-[11px] uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50 sticky top-0">
+                <th class="text-left font-semibold px-4 py-3">Cuota / vencimiento</th>
+                <th class="text-right font-semibold px-4 py-3">Valor cuota</th>
+                <th class="text-right font-semibold px-4 py-3">Abono capital</th>
+                <th class="text-right font-semibold px-4 py-3">Interés</th>
+                <th class="text-right font-semibold px-4 py-3" x-show="resultado.seguro > 0">Seguro / costo</th>
+                <th class="text-right font-semibold px-4 py-3 no-print">Abono extra ($)</th>
+                <th class="text-right font-semibold px-4 py-3">Total a pagar</th>
+                <th class="text-right font-semibold px-4 py-3">Saldo pendiente</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-for="linea in resultado.lineas" :key="linea.num">
+                <tr class="print-break-avoid hover:bg-slate-50/70 transition"
+                  :class="linea.esGracia ? 'bg-teal-50/60' : (linea.esNegativo ? 'bg-red-50' : '')">
+                  <td class="px-4 py-3 text-left">
+                    <div class="flex items-center gap-2">
+                      <span class="inline-grid place-items-center w-6 h-6 rounded-md bg-slate-100 text-slate-600 text-[11px] font-bold" x-text="linea.num"></span>
+                      <div class="leading-tight">
+                        <span class="font-semibold text-slate-800" x-text="linea.fecha"></span>
+                        <span x-show="linea.esGracia" class="block text-[10px] font-semibold uppercase tracking-wide text-teal-600">Periodo de gracia</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-right text-slate-700" x-text="formatMoney(linea.pagoMensual)"></td>
+                  <td class="px-4 py-3 text-right"
+                    :class="linea.esNegativo ? 'text-red-600 font-semibold' : 'text-slate-700'"
+                    x-text="formatMoney(linea.abonoCapitalBase)"></td>
+                  <td class="px-4 py-3 text-right text-red-500" x-text="formatMoney(linea.interes)"></td>
+                  <td class="px-4 py-3 text-right text-slate-500" x-show="resultado.seguro > 0" x-text="formatMoney(linea.seguro)"></td>
+                  <td class="px-4 py-3 text-right no-print">
+                    <input type="number" min="0" placeholder="0"
+                      :value="abonosExtra[linea.num] || ''"
+                      @change="registrarAbono(linea.num, $event.target.value)"
+                      class="w-28 tnum text-right rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition" />
+                  </td>
+                  <td class="px-4 py-3 text-right font-semibold text-slate-900" x-text="formatMoney(linea.cuotaTotal)"></td>
+                  <td class="px-4 py-3 text-right font-bold text-slate-900" x-text="formatMoney(linea.saldoRestante)"></td>
+                </tr>
+              </template>
+
+              <tr x-show="resultado.lineas.length === 0">
+                <td colspan="8" class="px-4 py-10 text-center text-slate-400 text-sm">
+                  Ingresa un monto mayor a cero para generar el plan de pagos.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-[11px] text-slate-400 mt-3 leading-relaxed">
+          Fechas calculadas a partir del desembolso: se suman meses calendario (mensual), 15 días (quincenal) o 7 días (semanal).
+          Documento de carácter informativo; valídalo contra las condiciones pactadas en el pagaré.
+        </p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+  /* =========================================================================
+     LÓGICA FINANCIERA  ·  preservada íntegra del simulador original.
+     Solo se añade el parámetro "seguro", que se suma a cada cuota y entra
+     en el flujo de la TIR (Costo Efectivo Anual). El núcleo de capital,
+     interés y saldo NO se altera.
+     ========================================================================= */
+
+  const formatter = new Intl.NumberFormat('es-CO', {
+    style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 2
+  });
+
+  // ---- Fechas de exigibilidad -------------------------------------------------
+  function parseLocalDate(str) {
+    // Evita el corrimiento de zona horaria de new Date('yyyy-mm-dd').
+    if (!str) return new Date();
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  }
+
+  function addMonths(date, n) {
+    const d = new Date(date.getTime());
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + n);
+    if (d.getDate() < day) d.setDate(0); // si desbordó de mes, fija el último día del mes objetivo
+    return d;
+  }
+
+  function addPeriods(baseDate, n, frecuencia) {
+    if (frecuencia === 'mensual') return addMonths(baseDate, n);
+    const d = new Date(baseDate.getTime());
+    d.setDate(d.getDate() + n * (frecuencia === 'quincenal' ? 15 : 7));
+    return d;
+  }
+
+  function formatDate(d) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // ---- Cuota francesa (sobre saldos) -----------------------------------------
+  function calcularCuotaFrancesa(tasa, periodos, monto) {
+    if (periodos <= 0) return monto;
+    if (tasa === 0) return monto / periodos;
+    if (Math.abs(tasa + 1) < 0.0001) return monto / periodos;
+
+    const potencia = Math.pow(1 + tasa, periodos);
+    const denominador = potencia - 1;
+    if (Math.abs(denominador) < 0.0001) return monto / periodos;
+
+    return (monto * tasa * potencia) / denominador;
+  }
+
+  // ---- Costo Efectivo Anual REAL: TIR por bisección, anualizada --------------
+  function tasaEfectivaAnual(monto, lineas, periodosPorAnio) {
+    if (monto <= 0 || !lineas || lineas.length === 0) return 0;
+    const pagos = lineas.map(l => (l.pagoMensual || 0) + (l.abonoExtra || 0) + (l.seguro || 0));
+    const totalPagos = pagos.reduce((a, b) => a + b, 0);
+    if (totalPagos <= monto) return 0;
+
+    const npv = (r) => monto - pagos.reduce((acc, p, idx) => acc + p / Math.pow(1 + r, idx + 1), 0);
+
+    let lo = 0, hi = 10; // hasta 1000% por periodo
+    if (npv(hi) < 0) return Infinity;
+    for (let k = 0; k < 200; k++) {
+      const mid = (lo + hi) / 2;
+      if (npv(mid) > 0) hi = mid; else lo = mid;
+    }
+    const rPeriodica = (lo + hi) / 2;
+    return Math.pow(1 + rPeriodica, periodosPorAnio) - 1;
+  }
+
+  // ---- Motor de amortización (idéntico al original + seguro) ------------------
+  function simularPrestamo(monto, totalPeriodos, tasaPeriodica, tipoCuota, cuotaManual, tipoGracia, periodosGracia, abonosExtra, sistema, seguro) {
+    monto = Math.max(0, parseFloat(monto) || 0);
+    totalPeriodos = Math.max(1, parseInt(totalPeriodos) || 1);
+    tasaPeriodica = Math.max(0, parseFloat(tasaPeriodica) || 0);
+    periodosGracia = Math.max(0, parseInt(periodosGracia) || 0);
+    seguro = Math.max(0, parseFloat(seguro) || 0);
+
+    if (monto === 0) {
+      return { cuotaAplicada: 0, totalPagado: 0, totalInteres: 0, totalSeguro: 0, saldoFinal: 0, periodosTotales: 0, amortizacionNegativa: false, lineas: [] };
+    }
+
+    let saldo = monto;
+    let totalPagado = 0;
+    let totalInteres = 0;
+    let totalSeguro = 0;
+    let amortizacionNegativa = false;
+    let lineas = [];
+
+    let periodosAmortizables = totalPeriodos - periodosGracia;
+    if (periodosAmortizables <= 0) periodosAmortizables = 1;
+
+    let cuotaFija = 0;
+    if (sistema === 'fijo') {
+      // INTERÉS ÚNICO FIJO: interés = monto * fracción global, UNA sola vez.
+      let interesTotal = monto * tasaPeriodica;
+      cuotaFija = tipoCuota === 'auto' ? ((monto + interesTotal) / totalPeriodos) : cuotaManual;
+    } else if (sistema === 'pagadiario') {
+      let interesFijo = monto * tasaPeriodica;
+      cuotaFija = tipoCuota === 'auto' ? ((monto + (interesFijo * totalPeriodos)) / totalPeriodos) : cuotaManual;
+    } else {
+      cuotaFija = tipoCuota === 'auto' ? calcularCuotaFrancesa(tasaPeriodica, periodosAmortizables, monto) : cuotaManual;
+    }
+
+    for (let i = 1; i <= totalPeriodos; i++) {
+      let interesMes;
+      if (sistema === 'fijo') interesMes = (monto * tasaPeriodica) / totalPeriodos;
+      else if (sistema === 'pagadiario') interesMes = monto * tasaPeriodica;
+      else interesMes = saldo * tasaPeriodica;
+
+      let cuotaReal = 0;
+      let abonoCapitalBase = 0;
+      let abonoExtra = abonosExtra[i] || 0;
+      let enGracia = false;
+
+      if (i <= periodosGracia && tipoGracia !== 'ninguno') {
+        enGracia = true;
+        if (tipoGracia === 'parcial') {
+          cuotaReal = interesMes;
+          abonoCapitalBase = 0;
+        } else if (tipoGracia === 'total') {
+          cuotaReal = 0;
+          abonoCapitalBase = -interesMes;
+        }
+      } else {
+        // Recalcular la cuota al terminar la gracia (tradicional y pagadiario).
+        if (i === periodosGracia + 1 && tipoCuota === 'auto' && saldo > 0 && sistema !== 'fijo') {
+          const periodosRestantes = totalPeriodos - periodosGracia;
+          if (periodosRestantes > 0) {
+            if (sistema === 'pagadiario') {
+              cuotaFija = (Math.max(0.01, saldo) / periodosRestantes) + (monto * tasaPeriodica);
+            } else {
+              cuotaFija = calcularCuotaFrancesa(tasaPeriodica, periodosRestantes, Math.max(0.01, saldo));
+            }
+          }
+        }
+        cuotaReal = cuotaFija;
+        abonoCapitalBase = cuotaReal - interesMes;
+      }
+
+      if (abonoCapitalBase < 0 && !enGracia) amortizacionNegativa = true;
+
+      // El abono extra nunca puede exceder el saldo que quedaría tras el abono base.
+      abonoExtra = Math.min(abonoExtra, Math.max(0, saldo - abonoCapitalBase));
+
+      let abonoTotalCapital = abonoCapitalBase + abonoExtra;
+
+      if (saldo <= abonoTotalCapital && !enGracia) {
+        abonoTotalCapital = saldo;
+        abonoCapitalBase = Math.max(0, saldo - abonoExtra);
+        cuotaReal = abonoCapitalBase + interesMes;
+        saldo = 0;
+      } else {
+        saldo -= abonoTotalCapital;
+      }
+
+      // El seguro/costo fijo se carga en cada periodo activo, además de la cuota.
+      totalPagado += (cuotaReal + abonoExtra + seguro);
+      totalInteres += interesMes;
+      totalSeguro += seguro;
+
+      if (saldo < 0.01) saldo = 0;
+
+      lineas.push({
+        num: i,
+        pagoMensual: cuotaReal,
+        abonoCapitalBase: abonoCapitalBase,
+        interes: interesMes,
+        abonoExtra: abonoExtra,
+        seguro: seguro,
+        saldoRestante: saldo,
+        esNegativo: abonoCapitalBase < 0 && !enGracia,
+        esGracia: enGracia
+      });
+
+      if (saldo <= 0 && !enGracia) break;
+    }
+
+    return { cuotaAplicada: cuotaFija, totalPagado, totalInteres, totalSeguro, saldoFinal: saldo, periodosTotales: lineas.length, amortizacionNegativa, lineas };
+  }
+
+  /* =========================================================================
+     COMPONENTE ALPINE  ·  estado reactivo + persistencia
+     ========================================================================= */
+  // Cálculo puro: recibe los parámetros ya saneados y devuelve el objeto de salida.
+  function computarResultado(p) {
+    const PERIODOS_POR_ANIO = { mensual: 12, quincenal: 24, semanal: 52 };
+    const PERIODOS_POR_MES  = { mensual: 1,  quincenal: 2,  semanal: 52 / 12 };
+
+    let monto       = parseFloat(p.monto) || 0;
+    let plazo       = parseInt(p.plazo) || 1;
+    let valorTasa   = parseFloat(p.tasa) || 0;
+    let cuotaManual = parseFloat(p.cuotaManual) || 0;
+    const tipoGracia = p.tipoGracia;
+    let tiempoGracia = tipoGracia !== 'ninguno' ? (parseInt(p.tiempoGracia) || 0) : 0;
+    let seguro      = parseFloat(p.seguro) || 0;
+    const sistema = p.sistema, frecuencia = p.frecuencia, tipoTasa = p.tipoTasa, tipoCuota = p.tipoCuota;
+
+    // Saneo de rangos.
+    monto        = Math.max(0, Math.min(999999999, monto));
+    plazo        = Math.max(1, Math.min(360, plazo));
+    valorTasa    = Math.max(0, Math.min(100, valorTasa));
+    tiempoGracia = Math.max(0, Math.min(120, tiempoGracia));
+    cuotaManual  = Math.max(0, cuotaManual);
+    seguro       = Math.max(0, seguro);
+
+    const esFijo = sistema === 'fijo';
+
+    // Conversión EFECTIVA por capitalización compuesta (idéntica al original).
+    let tasaPeriodica;
+    if (esFijo) {
+      tasaPeriodica = valorTasa / 100;                       // fracción global sobre el monto
+    } else if (tipoTasa === 'anual') {
+      tasaPeriodica = Math.pow(1 + valorTasa / 100, 1 / PERIODOS_POR_ANIO[frecuencia]) - 1;
+    } else {
+      tasaPeriodica = Math.pow(1 + valorTasa / 100, 1 / PERIODOS_POR_MES[frecuencia]) - 1;
+    }
+
+    const tipoGraciaEff   = esFijo ? 'ninguno' : tipoGracia;
+    const tiempoGraciaEff = esFijo ? 0 : tiempoGracia;
+
+    const simBase   = simularPrestamo(monto, plazo, tasaPeriodica, tipoCuota, cuotaManual, tipoGraciaEff, tiempoGraciaEff, {}, sistema, seguro);
+    const simActual = simularPrestamo(monto, plazo, tasaPeriodica, tipoCuota, cuotaManual, tipoGraciaEff, tiempoGraciaEff, p.abonosExtra, sistema, seguro);
+
+    const periodosPorAnio = PERIODOS_POR_ANIO[frecuencia];
+    const tea = tasaEfectivaAnual(monto, simActual.lineas, periodosPorAnio);
+    const cea = (tea === Infinity) ? '∞' : (tea * 100).toFixed(1) + '%';
+
+    // Fechas de exigibilidad.
+    const base = parseLocalDate(p.fechaDesembolso);
+    const lineas = simActual.lineas.map(l => ({
+      ...l,
+      fecha: formatDate(addPeriods(base, l.num, frecuencia)),
+      cuotaTotal: l.pagoMensual + l.seguro + l.abonoExtra
+    }));
+
+    let estado;
+    if (monto <= 0) {
+      estado = { text: 'Ingresa un monto para simular', clase: 'warn' };
+    } else if (simActual.saldoFinal > 0) {
+      estado = { text: 'Saldo activo · resta ' + formatter.format(simActual.saldoFinal), clase: 'warn' };
+    } else if (simActual.amortizacionNegativa) {
+      estado = { text: 'Amortización negativa detectada', clase: 'warn' };
+    } else {
+      estado = { text: 'Cancelado en ' + simActual.periodosTotales + ' cuotas', clase: 'ok' };
+    }
+
+    return {
+      cuotaBase: simActual.cuotaAplicada,
+      cuotaTotal: simActual.cuotaAplicada + seguro,
+      seguro,
+      totalPagado: simActual.totalPagado,
+      totalInteres: simActual.totalInteres,
+      totalSeguro: simActual.totalSeguro,
+      cea,
+      saldoFinal: simActual.saldoFinal,
+      periodosTotales: simActual.periodosTotales,
+      amortizacionNegativa: simActual.amortizacionNegativa,
+      estado,
+      comparativa: {
+        basePagado: simBase.totalPagado, actualPagado: simActual.totalPagado,
+        ahorroDinero: simBase.totalPagado - simActual.totalPagado,
+        baseInteres: simBase.totalInteres, actualInteres: simActual.totalInteres,
+        ahorroInteres: simBase.totalInteres - simActual.totalInteres,
+        basePeriodos: simBase.periodosTotales, actualPeriodos: simActual.periodosTotales,
+        ahorroMeses: simBase.periodosTotales - simActual.periodosTotales
+      },
+      lineas
+    };
+  }
+
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('simulador', () => {
+      // Memo en el closure (NO reactivo): evita recálculos redundantes por binding.
+      let cacheSig = null, cacheVal = null;
+
+      return {
+        // --- Inputs (persistidos en localStorage) ---
+        sistema:       Alpine.$persist('tradicional').as('sim_sistema'),
+        monto:         Alpine.$persist(1000000).as('sim_monto'),
+        fechaDesembolso: Alpine.$persist('').as('sim_fecha'),
+        frecuencia:    Alpine.$persist('mensual').as('sim_frecuencia'),
+        plazo:         Alpine.$persist(12).as('sim_plazo'),
+        tipoTasa:      Alpine.$persist('mensual').as('sim_tipoTasa'),
+        tasa:          Alpine.$persist(2).as('sim_tasa'),
+        seguro:        Alpine.$persist(0).as('sim_seguro'),
+        tipoGracia:    Alpine.$persist('ninguno').as('sim_tipoGracia'),
+        tiempoGracia:  Alpine.$persist(2).as('sim_tiempoGracia'),
+        tipoCuota:     Alpine.$persist('auto').as('sim_tipoCuota'),
+        cuotaManual:   Alpine.$persist(100000).as('sim_cuotaManual'),
+        abonosExtra:   Alpine.$persist({}).as('sim_abonos'),
+
+        init() {
+          if (!this.fechaDesembolso) {
+            const t = new Date();
+            this.fechaDesembolso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+          }
+        },
+
+        // --- Resultado COMPUTADO: se recalcula solo cuando cambia algún dato ---
+        get resultado() {
+          // Leer cada propiedad aquí enlaza la reactividad con la plantilla.
+          const snap = {
+            sistema: this.sistema, monto: this.monto, fechaDesembolso: this.fechaDesembolso,
+            frecuencia: this.frecuencia, plazo: this.plazo, tipoTasa: this.tipoTasa,
+            tasa: this.tasa, seguro: this.seguro, tipoGracia: this.tipoGracia,
+            tiempoGracia: this.tiempoGracia, tipoCuota: this.tipoCuota, cuotaManual: this.cuotaManual,
+            abonosExtra: JSON.parse(JSON.stringify(this.abonosExtra || {}))
+          };
+          const sig = JSON.stringify(snap);
+          if (sig === cacheSig) return cacheVal;
+          cacheSig = sig;
+          cacheVal = computarResultado(snap);
+          return cacheVal;
+        },
+
+        // --- Etiquetas dinámicas ---
+        get esFijo() { return this.sistema === 'fijo'; },
+        get unidadPlural() { return this.frecuencia === 'mensual' ? 'Meses' : this.frecuencia === 'quincenal' ? 'Quincenas' : 'Semanas'; },
+        get unidadCuota() { return this.frecuencia === 'mensual' ? 'Mensual' : this.frecuencia === 'quincenal' ? 'Quincenal' : 'Semanal'; },
+        get fechaDesembolsoLegible() { return this.fechaDesembolso ? formatDate(parseLocalDate(this.fechaDesembolso)) : '—'; },
+
+        // Alerta en tiempo real: cuota manual menor al interés del primer periodo.
+        get alertaNegativa() {
+          return this.tipoCuota === 'manual' && this.resultado.amortizacionNegativa;
+        },
+
+        // --- Helpers de formato (usados en plantilla) ---
+        formatMoney(v) { return formatter.format(v || 0); },
+
+        // --- Abonos extra ---
+        registrarAbono(num, valor) {
+          let v = parseFloat(valor);
+          if (isNaN(v) || v < 0) v = 0;
+          if (v === 0) delete this.abonosExtra[num];
+          else this.abonosExtra[num] = v;
+        },
+        reiniciarAbonos() {
+          for (const k of Object.keys(this.abonosExtra)) delete this.abonosExtra[k];
+        }
+      };
+    });
+  });
+</script>
+</body>
+</html>
