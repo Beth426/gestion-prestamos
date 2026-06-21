@@ -2,6 +2,9 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// NOTE: Prisma 7 reads the datasource URL from prisma.config.ts (via process.env["DATABASE_URL"]).
+// The `url` field is intentionally absent here; adding it would cause a conflict.
+// See prisma.config.ts → datasource.url for the connection string configuration.
 datasource db {
   provider = "postgresql"
 }
@@ -15,9 +18,10 @@ model Usuario {
   creadoEn     DateTime  @default(now())
   eliminadoEn  DateTime?
 
-  prestamos Prestamo[]
-  auditLogs AuditLog[]
-  sesiones  Session[]
+  prestamos        Prestamo[]
+  auditLogs        AuditLog[]
+  sesiones         Session[]
+  pagosRegistrados Pago[]     @relation("PagosRegistrados")
 }
 
 enum Rol {
@@ -81,6 +85,11 @@ model Prestamo {
   cuotas    Cuota[]
   pagos     Pago[]
   auditLogs AuditLog[]
+
+  @@index([clienteId])
+  @@index([asesorId])
+  @@index([estado])
+  @@index([eliminadoEn])
 }
 
 enum SistemaCredito {
@@ -128,6 +137,9 @@ model Cuota {
 
   prestamo Prestamo @relation(fields: [prestamoId], references: [id])
   pagos    Pago[]
+
+  @@index([prestamoId])
+  @@unique([prestamoId, numero])
 }
 
 model Pago {
@@ -142,8 +154,11 @@ model Pago {
   creadoEn        DateTime  @default(now())
   eliminadoEn     DateTime?
 
-  prestamo Prestamo @relation(fields: [prestamoId], references: [id])
-  cuota    Cuota?   @relation(fields: [cuotaId], references: [id])
+  prestamo      Prestamo @relation(fields: [prestamoId], references: [id])
+  cuota         Cuota?   @relation(fields: [cuotaId], references: [id])
+  registradoPor Usuario  @relation("PagosRegistrados", fields: [registradoPorId], references: [id])
+
+  @@index([prestamoId])
 }
 
 enum TipoPago {
@@ -166,4 +181,7 @@ model AuditLog {
 
   usuario  Usuario   @relation(fields: [usuarioId], references: [id])
   prestamo Prestamo? @relation(fields: [prestamoId], references: [id])
+
+  @@index([entidad, entidadId])
+  @@index([usuarioId])
 }
