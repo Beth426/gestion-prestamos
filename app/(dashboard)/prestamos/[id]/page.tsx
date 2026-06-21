@@ -5,7 +5,6 @@ import { formatCOP, formatFecha, formatPorcentaje } from '@/lib/format'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CuotasTable } from '@/components/prestamos/cuotas-table'
 import { PagoForm } from '@/components/prestamos/pago-form'
-import { Separator } from '@/components/ui/separator'
 import { auth } from '@/lib/auth'
 import type { Rol } from '@prisma/client'
 
