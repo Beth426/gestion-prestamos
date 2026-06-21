@@ -159,10 +159,11 @@ model AuditLog {
   entidadId    String
   accion       String
   usuarioId    String
+  prestamoId   String?
   valorAntes   Json?
   valorDespues Json?
   creadoEn     DateTime @default(now())
 
   usuario  Usuario   @relation(fields: [usuarioId], references: [id])
-  prestamo Prestamo? @relation(fields: [entidadId], references: [id], map: "audit_prestamo")
+  prestamo Prestamo? @relation(fields: [prestamoId], references: [id])
 }
