@@ -41,7 +41,7 @@ export interface ResultadoSimulacion {
 }
 
 export function simularPrestamo(p: ParametrosSimulacion): ResultadoSimulacion {
-  let monto = Math.max(0, p.monto || 0)
+  const monto = Math.max(0, p.monto || 0)
   const totalPeriodos = Math.max(1, p.totalPeriodos || 1)
   const tasaPeriodica = Math.max(0, p.tasaPeriodica || 0)
   const periodosGracia = Math.max(0, p.periodosGracia || 0)
