@@ -4,14 +4,20 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { PrestamosTable } from '@/components/prestamos/prestamos-table'
 import type { EstadoPrestamo } from '@prisma/client'
+import { auth } from '@/lib/auth'
+import type { Rol } from '@prisma/client'
 
 const ESTADOS: EstadoPrestamo[] = ['ACTIVO', 'AL_DIA', 'MORA', 'CANCELADO', 'CASTIGADO']
 
-export default function PrestamosPage({
+export default async function PrestamosPage({
   searchParams,
 }: {
   searchParams: { estado?: string }
 }) {
+  const session = await auth()
+  const rol = session?.user?.rol as Rol | undefined
+  const puedeCrear = rol === 'ADMIN' || rol === 'ASESOR'
+
   const estado = ESTADOS.includes(searchParams.estado as EstadoPrestamo)
     ? (searchParams.estado as EstadoPrestamo)
     : undefined
@@ -20,9 +26,11 @@ export default function PrestamosPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Préstamos</h1>
-        <Button asChild>
-          <Link href="/prestamos/nuevo">Nuevo préstamo</Link>
-        </Button>
+        {puedeCrear && (
+          <Button asChild>
+            <Link href="/prestamos/nuevo">Nuevo préstamo</Link>
+          </Button>
+        )}
       </div>
       <div className="flex gap-2 flex-wrap">
         <Link

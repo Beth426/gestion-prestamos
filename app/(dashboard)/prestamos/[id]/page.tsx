@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CuotasTable } from '@/components/prestamos/cuotas-table'
 import { PagoForm } from '@/components/prestamos/pago-form'
 import { Separator } from '@/components/ui/separator'
+import { auth } from '@/lib/auth'
+import type { Rol } from '@prisma/client'
 
 const estadoColor: Record<string, string> = {
   ACTIVO: 'bg-green-100 text-green-700',
@@ -20,6 +22,10 @@ export default async function PrestamoDetallePage({
 }: {
   params: { id: string }
 }) {
+  const session = await auth()
+  const rol = session?.user?.rol as Rol | undefined
+  const puedeRegistrarPago = rol === 'ADMIN' || rol === 'ASESOR' || rol === 'COBRANZA'
+
   const prestamo = await prisma.prestamo.findFirst({
     where: { id: params.id, eliminadoEn: null },
     include: {
@@ -87,14 +93,16 @@ export default async function PrestamoDetallePage({
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Registrar pago</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PagoForm prestamoId={prestamo.id} />
-            </CardContent>
-          </Card>
+          {puedeRegistrarPago && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Registrar pago</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <PagoForm prestamoId={prestamo.id} />
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>

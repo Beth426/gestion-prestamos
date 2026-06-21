@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { ClienteForm } from '@/components/clientes/cliente-form'
+import { auth } from '@/lib/auth'
+import type { Rol } from '@prisma/client'
 
 const estadoColor: Record<string, string> = {
   ACTIVO: 'bg-green-100 text-green-700',
@@ -35,6 +37,10 @@ export default async function ClienteDetallePage({
 }: {
   params: { id: string }
 }) {
+  const session = await auth()
+  const rol = session?.user?.rol as Rol | undefined
+  const puedeEditar = rol === 'ADMIN' || rol === 'ASESOR'
+
   const cliente = await prisma.cliente.findFirst({
     where: { id: params.id, eliminadoEn: null },
     include: {
@@ -58,26 +64,28 @@ export default async function ClienteDetallePage({
           <h1 className="text-2xl font-bold">{cliente.nombreCompleto}</h1>
           <p className="text-zinc-500 text-sm">CC {cliente.documento}</p>
         </div>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline">Editar</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Editar cliente</DialogTitle>
-            </DialogHeader>
-            <ClienteForm
-              clienteId={cliente.id}
-              defaultValues={{
-                nombreCompleto: cliente.nombreCompleto,
-                documento: cliente.documento,
-                telefono: cliente.telefono ?? undefined,
-                email: cliente.email ?? undefined,
-                direccion: cliente.direccion ?? undefined,
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        {puedeEditar && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">Editar</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Editar cliente</DialogTitle>
+              </DialogHeader>
+              <ClienteForm
+                clienteId={cliente.id}
+                defaultValues={{
+                  nombreCompleto: cliente.nombreCompleto,
+                  documento: cliente.documento,
+                  telefono: cliente.telefono ?? undefined,
+                  email: cliente.email ?? undefined,
+                  direccion: cliente.direccion ?? undefined,
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <Card>
@@ -107,9 +115,11 @@ export default async function ClienteDetallePage({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Préstamos</CardTitle>
-          <Button asChild size="sm">
-            <Link href={`/prestamos/nuevo?clienteId=${cliente.id}`}>Nuevo préstamo</Link>
-          </Button>
+          {puedeEditar && (
+            <Button asChild size="sm">
+              <Link href={`/prestamos/nuevo?clienteId=${cliente.id}`}>Nuevo préstamo</Link>
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {cliente.prestamos.length === 0 ? (
