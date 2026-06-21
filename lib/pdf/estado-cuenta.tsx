@@ -6,6 +6,8 @@ import {
   Text,
   StyleSheet,
 } from '@react-pdf/renderer'
+import type { Styles } from '@react-pdf/renderer'
+type Style = Styles[string]
 import { formatCOP, formatFecha } from '@/lib/format'
 import type {
   SistemaCredito,
@@ -93,6 +95,7 @@ type CuotaData = {
   pagos: Array<{ eliminadoEn: Date | null }>
 }
 
+/** Payment record — caller MUST pre-filter to exclude soft-deleted (eliminadoEn !== null) */
 type PagoData = {
   montoCentavos: number
   fechaPago: Date
@@ -123,7 +126,7 @@ type EstadoCuentaProps = {
   generadoEn: string
 }
 
-function estadoCuota(cuota: CuotaData, hoy: Date): { label: string; style: object } {
+function estadoCuota(cuota: CuotaData, hoy: Date): { label: string; style: Style } {
   const pagada = cuota.pagos.some((p) => p.eliminadoEn === null)
   if (pagada) return { label: 'Pagada', style: styles.estadoPagada }
   if (cuota.fechaVencimiento < hoy) return { label: 'Mora', style: styles.estadoMora }
@@ -267,7 +270,7 @@ export function EstadoCuentaPDF({ prestamo, generadoEn }: EstadoCuentaProps) {
               {prestamo.pagos.map((p, i) => {
                 const rowStyle = i % 2 === 0 ? styles.tableRow : styles.tableRowAlt
                 return (
-                  <View key={i} style={rowStyle}>
+                  <View key={`${p.fechaPago.toISOString()}-${p.montoCentavos}-${i}`} style={rowStyle}>
                     <Text style={styles.colPagoFecha}>{formatFecha(p.fechaPago)}</Text>
                     <Text style={styles.colPagoMonto}>{formatCOP(p.montoCentavos)}</Text>
                     <Text style={styles.colPagoTipo}>{p.tipoPago}</Text>
