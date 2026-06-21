@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// NOTE: Prisma 7 reads the datasource URL from prisma.config.ts (via process.env["DATABASE_URL"]).
+// The `url` field is intentionally absent here; adding it would cause a conflict.
+// See prisma.config.ts → datasource.url for the connection string configuration.
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  nombre       String
+  rol          Rol       @default(ASESOR)
+  passwordHash String?
+  creadoEn     DateTime  @default(now())
+  eliminadoEn  DateTime?
+
+  prestamos        Prestamo[]
+  auditLogs        AuditLog[]
+  sesiones         Session[]
+  pagosRegistrados Pago[]     @relation("PagosRegistrados")
+}
+
+enum Rol {
+  ADMIN
+  ASESOR
+  COBRANZA
+  READONLY
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  usuarioId    String
+  expires      DateTime
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Cliente {
+  id             String    @id @default(cuid())
+  nombreCompleto String
+  documento      String    @unique
+  telefono       String?
+  email          String?
+  direccion      String?
+  creadoEn       DateTime  @default(now())
+  actualizadoEn  DateTime  @updatedAt
+  eliminadoEn    DateTime?
+
+  prestamos Prestamo[]
+}
+
+model Prestamo {
+  id              String         @id @default(cuid())
+  clienteId       String
+  asesorId        String
+  sistema         SistemaCredito
+  estado          EstadoPrestamo @default(ACTIVO)
+  montoCentavos   Int
+  tasaValor       Decimal        @db.Decimal(18, 8)
+  tipoTasa        TipoTasa
+  frecuencia      Frecuencia
+  plazo           Int
+  tipoGracia      TipoGracia     @default(NINGUNO)
+  periodosGracia  Int            @default(0)
+  seguroCentavos  Int            @default(0)
+  fechaDesembolso DateTime
+  creadoEn        DateTime       @default(now())
+  actualizadoEn   DateTime       @updatedAt
+  eliminadoEn     DateTime?
+
+  cliente   Cliente    @relation(fields: [clienteId], references: [id])
+  asesor    Usuario    @relation(fields: [asesorId], references: [id])
+  cuotas    Cuota[]
+  pagos     Pago[]
+  auditLogs AuditLog[]
+
+  @@index([clienteId])
+  @@index([asesorId])
+  @@index([estado])
+  @@index([eliminadoEn])
+}
+
+enum SistemaCredito {
+  TRADICIONAL
+  PAGADIARIO
+  FIJO
+}
+
+enum EstadoPrestamo {
+  ACTIVO
+  AL_DIA
+  MORA
+  CANCELADO
+  CASTIGADO
+}
+
+enum TipoTasa {
+  ANUAL
+  MENSUAL
+}
+
+enum Frecuencia {
+  MENSUAL
+  QUINCENAL
+  SEMANAL
+}
+
+enum TipoGracia {
+  NINGUNO
+  PARCIAL
+  TOTAL
+}
+
+model Cuota {
+  id               String   @id @default(cuid())
+  prestamoId       String
+  numero           Int
+  fechaVencimiento DateTime
+  capitalCentavos  Int
+  interesCentavos  Int
+  seguroCentavos   Int      @default(0)
+  totalCentavos    Int
+  saldoCentavos    Int
+  esGracia         Boolean  @default(false)
+
+  prestamo Prestamo @relation(fields: [prestamoId], references: [id])
+  pagos    Pago[]
+
+  @@index([prestamoId])
+  @@unique([prestamoId, numero])
+}
+
+model Pago {
+  id              String    @id @default(cuid())
+  prestamoId      String
+  cuotaId         String?
+  montoCentavos   Int
+  fechaPago       DateTime
+  tipoPago        TipoPago  @default(CUOTA)
+  notas           String?
+  registradoPorId String
+  creadoEn        DateTime  @default(now())
+  eliminadoEn     DateTime?
+
+  prestamo      Prestamo @relation(fields: [prestamoId], references: [id])
+  cuota         Cuota?   @relation(fields: [cuotaId], references: [id])
+  registradoPor Usuario  @relation("PagosRegistrados", fields: [registradoPorId], references: [id])
+
+  @@index([prestamoId])
+}
+
+enum TipoPago {
+  CUOTA
+  ABONO_EXTRA
+  AJUSTE
+  CASTIGO
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  entidad      String
+  entidadId    String
+  accion       String
+  usuarioId    String
+  prestamoId   String?
+  valorAntes   Json?
+  valorDespues Json?
+  creadoEn     DateTime @default(now())
+
+  usuario  Usuario   @relation(fields: [usuarioId], references: [id])
+  prestamo Prestamo? @relation(fields: [prestamoId], references: [id])
+
+  @@index([entidad, entidadId])
+  @@index([usuarioId])
+}
