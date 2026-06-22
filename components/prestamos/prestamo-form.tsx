@@ -76,7 +76,9 @@ function calcularSimulacion(data: FormValues): ResultadoSimulacion {
 
 // ─── component ──────────────────────────────────────────────────────────────
 
-export function PrestamoForm() {
+type ClienteOption = { id: string; nombreCompleto: string; documento: string }
+
+export function PrestamoForm({ clientes = [] }: { clientes?: ClienteOption[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const prefilledClienteId = searchParams.get('clienteId') ?? ''
@@ -147,11 +149,24 @@ export function PrestamoForm() {
       <form onSubmit={handleSubmit(onStep1Submit)} className="space-y-5">
         {/* Cliente */}
         <div className="space-y-2">
-          <Label htmlFor="clienteId">ID de cliente *</Label>
+          <Label>Cliente *</Label>
           {prefilledClienteId ? (
-            <Input id="clienteId" value={prefilledClienteId} readOnly className="bg-muted" />
+            <Input value={clientes.find(c => c.id === prefilledClienteId)?.nombreCompleto ?? prefilledClienteId} readOnly className="bg-muted" />
           ) : (
-            <Input id="clienteId" {...register('clienteId')} placeholder="cuid del cliente" />
+            <Select
+              onValueChange={(v) => setValue('clienteId', v, { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona un cliente" />
+              </SelectTrigger>
+              <SelectContent>
+                {clientes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nombreCompleto} — {c.documento}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           {errors.clienteId && (
             <p className="text-xs text-red-600">{errors.clienteId.message}</p>
@@ -187,7 +202,7 @@ export function PrestamoForm() {
           <Input
             id="monto"
             type="number"
-            min={1}
+            min={1000}
             step={1000}
             {...register('monto', { valueAsNumber: true })}
             placeholder="1000000"
