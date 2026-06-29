@@ -56,11 +56,21 @@ export default async function PrestamoDetallePage({
           </h1>
           <p className="text-zinc-500 text-sm">{prestamo.sistema} · {prestamo.frecuencia}</p>
         </div>
-        <span
-          className={`text-sm px-3 py-1 rounded-full font-medium ${estadoColor[prestamo.estado] ?? ''}`}
-        >
-          {prestamo.estado}
-        </span>
+        <div className="flex items-center gap-3">
+          <span
+            className={`text-sm px-3 py-1 rounded-full font-medium ${estadoColor[prestamo.estado] ?? ''}`}
+          >
+            {prestamo.estado}
+          </span>
+          <a
+            href={`/api/prestamos/${prestamo.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 font-medium transition-colors"
+          >
+            ↓ PDF
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
